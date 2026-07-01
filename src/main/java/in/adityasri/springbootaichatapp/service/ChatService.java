@@ -1,5 +1,7 @@
 package in.adityasri.springbootaichatapp.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -22,6 +24,8 @@ import reactor.core.publisher.Flux;
 @Service
 public class ChatService {
 
+    private static final Logger log = LoggerFactory.getLogger(ChatService.class);
+
     private final ChatClient chatClient;
 
     public ChatService(ChatClient.Builder chatClientBuilder, ChatMemory chatMemory) {
@@ -35,6 +39,7 @@ public class ChatService {
      * the advisor replays this conversationId's recent history before the model answers.
      */
     public String chat(String conversationId, String userMessage) {
+        log.debug("chat request [conversationId={}], {} chars", conversationId, userMessage.length());
         return chatClient.prompt()
                 .user(userMessage)
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
