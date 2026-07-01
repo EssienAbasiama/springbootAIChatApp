@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spring Boot AI Chat</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+        h1 { font-size: 1.4rem; }
+        #log { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; min-height: 200px; white-space: pre-wrap; }
+        .row { display: flex; gap: 0.5rem; margin-top: 1rem; }
+        input { flex: 1; padding: 0.6rem; border: 1px solid #ccc; border-radius: 6px; }
+        button { padding: 0.6rem 1rem; border: 0; border-radius: 6px; background: #2563eb; color: #fff; cursor: pointer; }
+        button:disabled { background: #9ca3af; cursor: not-allowed; }
+        label { font-size: 0.85rem; color: #555; }
+    </style>
+</head>
+<body>
+    <h1>Spring Boot AI Chat</h1>
+    <label><input type="checkbox" id="stream" checked> Stream response</label>
+    <div id="log"></div>
+    <div class="row">
+        <input id="msg" placeholder="Ask something..." autocomplete="off">
+        <button id="send">Send</button>
+    </div>
+
+    <script>
+        const conversationId = "web-" + Math.random().toString(36).slice(2, 8);
+        const log = document.getElementById("log");
+        const input = document.getElementById("msg");
+        const button = document.getElementById("send");
+
+        function append(text) { log.textContent += text; }
+
+        async function send() {
+            const message = input.value.trim();
+            if (!message) return;
+            input.value = "";
+            button.disabled = true;
+            append("\nYou: " + message + "\nAI: ");
+
+            try {
+                if (document.getElementById("stream").checked) {
+                    const url = `/api/chat/stream?message=${encodeURIComponent(message)}&conversationId=${conversationId}`;
+                    const res = await fetch(url);
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        append(decoder.decode(value, { stream: true }).replace(/data:/g, ""));
+                    }
+                } else {
+                    const url = `/api/chat/ask?message=${encodeURIComponent(message)}&conversationId=${conversationId}`;
+                    const res = await fetch(url);
+                    const body = await res.json();
+                    append(body.answer);
+                }
+            } catch (e) {
+                append("[error] " + e.message);
+            } finally {
+                append("\n");
+                button.disabled = false;
+                input.focus();
+            }
+        }
+
+        button.addEventListener("click", send);
+        input.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+    </script>
+</body>
+</html>
