@@ -1,68 +1,67 @@
 package in.adityasri.springbootaichatapp.service;
 
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 /**
  * — ChatClient (Spring AI 1.0):
  *   ChatClient is the recommended, high-level fluent API for talking to LLMs.
- *   It sits on top of the lower-level ChatModel and reads much closer to how
- *   you'd describe the request in plain English:
- *
- *       chatClient.prompt().user("Hello").call().content();
- *
- *   Compared to using ChatModel directly it gives us:
- *     - a fluent builder (system/user/params in one chain)
  *     - .call()   -> blocking, returns the full response
  *     - .stream() -> reactive, streams tokens as they arrive
- *     - a place to plug in advisors (memory, RAG, logging) later
+ *     - advisors  -> cross-cutting behaviour (memory, RAG, logging)
  *
- * — Dependency Injection:
- *   We inject a ChatClient.Builder (auto-configured by the openai starter) and
- *   build one reusable ChatClient. The builder already carries the model +
- *   options from application.properties.
+ * — Conversation memory (advisor):
+ *   MessageChatMemoryAdvisor is registered as a DEFAULT advisor, so every call
+ *   automatically loads prior turns and saves the new ones. Each request passes
+ *   a conversationId (ChatMemory.CONVERSATION_ID) so different chats keep
+ *   separate histories instead of bleeding into each other.
  */
 @Service
 public class ChatService {
 
     private final ChatClient chatClient;
 
-    public ChatService(ChatClient.Builder chatClientBuilder) {
-        this.chatClient = chatClientBuilder.build();
+    public ChatService(ChatClient.Builder chatClientBuilder, ChatMemory chatMemory) {
+        this.chatClient = chatClientBuilder
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
+                .build();
     }
 
     /**
-     * Simple chat — a single user message, no system context.
-     * .call().content() blocks until the full reply is ready and returns it as text.
+     * Simple chat — a single user message. Memory makes it multi-turn:
+     * the advisor replays this conversationId's recent history before the model answers.
      */
-    public String chat(String userMessage) {
+    public String chat(String conversationId, String userMessage) {
         return chatClient.prompt()
                 .user(userMessage)
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
                 .call()
                 .content();
     }
 
     /**
-     * Chat with a system prompt — gives the AI a persona/context.
-     * The system message steers the model's behaviour but is not the user's input.
+     * Chat with a system prompt — gives the AI a persona/context on top of memory.
      */
-    public String chatWithSystem(String systemContext, String userMessage) {
+    public String chatWithSystem(String conversationId, String systemContext, String userMessage) {
         return chatClient.prompt()
                 .system(systemContext)
                 .user(userMessage)
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
                 .call()
                 .content();
     }
 
     /**
-     * Streaming chat — emits the response token-by-token as a Flux.
-     * The controller relays this as Server-Sent Events so the UI can render
-     * the answer as it's being generated (the classic "typing" effect).
+     * Streaming chat — emits the response token-by-token as a Flux, while still
+     * reading from and writing to this conversation's memory.
      */
-    public Flux<String> chatStream(String userMessage) {
+    public Flux<String> chatStream(String conversationId, String userMessage) {
         return chatClient.prompt()
                 .user(userMessage)
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
                 .stream()
                 .content();
     }

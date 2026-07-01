@@ -16,7 +16,7 @@
     <description>Simple AI Chat App using Spring Boot and OpenAI</description>
 
     <properties>
-        <java.version>25</java.version>
+        <java.version>23</java.version>
         <spring-ai.version>1.0.0</spring-ai.version>
     </properties>
 
@@ -31,6 +31,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- Actuator: production-ready health/info endpoints -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
         <!-- Spring AI OpenAI integration -->
