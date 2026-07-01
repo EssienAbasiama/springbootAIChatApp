@@ -18,11 +18,12 @@ import reactor.core.publisher.Flux;
  *   All endpoints in this class are prefixed with /api/chat.
  *
  *  — @Validated:
- *   Enables validation of @RequestParam / @PathVariable constraints
- *   (like the @NotBlank below). Body validation uses @Valid on the parameter.
+ *   Enables validation of @RequestParam constraints (like the @NotBlank below).
+ *   Body validation uses @Valid on the parameter.
  *
- *  — MVC Layer Separation:
- *   Controller (HTTP in/out) → Service (business logic) → Model.
+ *  — conversationId:
+ *   Ties requests to a memory thread. Clients that want multi-turn context send
+ *   a stable id (e.g. per user/session); if omitted it falls back to "default".
  */
 @RestController
 @RequestMapping("/api/chat")
@@ -38,44 +39,45 @@ public class ChatController {
 
     /**
      * Simple chat endpoint.
-     *   GET /api/chat/ask?message=Hello
+     *   GET /api/chat/ask?message=Hello&conversationId=abc
      *
      * @NotBlank rejects null/empty/whitespace-only messages with a 400 before
      * we ever spend a token on the OpenAI call.
      */
     @GetMapping("/ask")
     public ChatResponse ask(
-            @RequestParam @NotBlank @Size(max = 4000) String message) {
-        return new ChatResponse(chatService.chat(message));
+            @RequestParam @NotBlank @Size(max = 4000) String message,
+            @RequestParam(defaultValue = "default") String conversationId) {
+        return new ChatResponse(chatService.chat(conversationId, message));
     }
 
     /**
      * Chat with a system prompt — give the AI a custom persona.
-     *   POST /api/chat/ask-with-context
+     *   POST /api/chat/ask-with-context?conversationId=abc
      *   { "system": "You are a pirate.", "message": "Capital of France?" }
-     *
-     * @Valid triggers validation of the record's field constraints.
      */
     @PostMapping("/ask-with-context")
-    public ChatResponse askWithContext(@Valid @RequestBody ChatRequest request) {
-        return new ChatResponse(chatService.chatWithSystem(request.system(), request.message()));
+    public ChatResponse askWithContext(
+            @Valid @RequestBody ChatRequest request,
+            @RequestParam(defaultValue = "default") String conversationId) {
+        return new ChatResponse(
+                chatService.chatWithSystem(conversationId, request.system(), request.message()));
     }
 
     /**
      * Streaming chat endpoint — Server-Sent Events (text/event-stream).
-     * Returns a Flux; Spring MVC streams each emitted chunk to the client as it
-     * arrives, so a UI can render the reply progressively.
-     *   GET /api/chat/stream?message=Tell me a story
+     * Returns a Flux; Spring MVC streams each chunk to the client as it arrives.
+     *   GET /api/chat/stream?message=Tell me a story&conversationId=abc
      */
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> stream(
-            @RequestParam @NotBlank @Size(max = 4000) String message) {
-        return chatService.chatStream(message);
+            @RequestParam @NotBlank @Size(max = 4000) String message,
+            @RequestParam(defaultValue = "default") String conversationId) {
+        return chatService.chatStream(conversationId, message);
     }
 
     /**
      * Request DTO — @NotBlank guards both fields; @Size caps abuse.
-     * The system prompt is optional context but still shouldn't be blank if sent.
      */
     record ChatRequest(
             @NotBlank @Size(max = 4000) String system,

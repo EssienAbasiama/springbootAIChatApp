@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
 import java.time.Instant;
 import java.util.Map;
@@ -35,6 +36,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<Map<String, Object>> handleParamValidation(ConstraintViolationException ex) {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    // Spring MVC's built-in method validation (@NotBlank/@Size on @RequestParam)
+    // raises this; handle it explicitly so it isn't swallowed by the 502 catch-all.
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleParamValidation(HandlerMethodValidationException ex) {
+        return build(HttpStatus.BAD_REQUEST, "Invalid request parameters");
     }
 
     @ExceptionHandler(Exception.class)
