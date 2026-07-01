@@ -1,87 +1,86 @@
 package in.adityasri.springbootaichatapp.controller;
 
 import in.adityasri.springbootaichatapp.service.ChatService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import org.springframework.http.MediaType;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 
 /**
  *  — @RestController:
- *   Shortcut for @Controller + @ResponseBody.
- *   Every method returns data (JSON/text) directly in the HTTP response body,
- *   NOT a view/template name.
+ *   Shortcut for @Controller + @ResponseBody. Every method returns data
+ *   (JSON/text) directly in the HTTP response body, NOT a view name.
  *
  *  — @RequestMapping("/api/chat"):
  *   All endpoints in this class are prefixed with /api/chat.
- *   So @GetMapping("/ask") becomes GET /api/chat/ask
+ *
+ *  — @Validated:
+ *   Enables validation of @RequestParam / @PathVariable constraints
+ *   (like the @NotBlank below). Body validation uses @Valid on the parameter.
  *
  *  — MVC Layer Separation:
- *   Controller → Service → (Model/Repository)
- *   Controller handles HTTP in/out.
- *   Service holds business logic.
- *   Keeping them separate makes testing and changes easier.
+ *   Controller (HTTP in/out) → Service (business logic) → Model.
  */
 @RestController
 @RequestMapping("/api/chat")
+@Validated
 public class ChatController {
 
     private final ChatService chatService;
 
-    // Constructor Injection:
-    // Spring sees this constructor needs a ChatService, and injects the bean automatically.
-    // No @Autowired needed when there's only one constructor (Spring 4.3+).
+    // Constructor injection — no @Autowired needed for a single constructor (Spring 4.3+).
     public ChatController(ChatService chatService) {
         this.chatService = chatService;
     }
 
     /**
      * Simple chat endpoint.
+     *   GET /api/chat/ask?message=Hello
      *
-     * — @GetMapping / @RequestParam:
-     *   @GetMapping maps HTTP GET requests to this method.
-     *   @RequestParam reads a query parameter from the URL.
-     *
-     *   Example request:
-     *     GET /api/chat/ask?message=Hello
-     *
-     *   How Spring processes it:
-     *     1. HTTP request comes in
-     *     2. DispatcherServlet routes it here
-     *     3. Spring reads ?message=Hello → injects into `message` param
-     *     4. Return value is serialized (plain text here) → HTTP response body
+     * @NotBlank rejects null/empty/whitespace-only messages with a 400 before
+     * we ever spend a token on the OpenAI call.
      */
     @GetMapping("/ask")
-    public String ask(@RequestParam String message) {
-        return chatService.chat(message);
+    public ChatResponse ask(
+            @RequestParam @NotBlank @Size(max = 4000) String message) {
+        return new ChatResponse(chatService.chat(message));
     }
 
     /**
-     * Chat with a system prompt endpoint — allows giving AI a custom persona.
+     * Chat with a system prompt — give the AI a custom persona.
+     *   POST /api/chat/ask-with-context
+     *   { "system": "You are a pirate.", "message": "Capital of France?" }
      *
-     *  - @PostMapping / @RequestBody:
-     *   @PostMapping maps HTTP POST requests.
-     *   @RequestBody reads the JSON request body and maps it to a Java record/object.
-     *
-     *   Example request:
-     *     POST /api/chat/ask-with-context
-     *     Content-Type: application/json
-     *     {
-     *       "system": "You are a pirate who only speaks in riddles.",
-     *       "message": "What is the capital of France?"
-     *     }
-     *
-     *  — Java Records (Java 16+):
-     *   `record ChatRequest(String system, String message)` auto-generates:
-     *     - constructor, getters (system(), message()), equals(), hashCode(), toString()
-     *   Perfect for simple data carriers (like request/response DTOs).
+     * @Valid triggers validation of the record's field constraints.
      */
     @PostMapping("/ask-with-context")
-    public String askWithContext(@RequestBody ChatRequest request) {
-        return chatService.chatWithSystem(request.system(), request.message());
+    public ChatResponse askWithContext(@Valid @RequestBody ChatRequest request) {
+        return new ChatResponse(chatService.chatWithSystem(request.system(), request.message()));
     }
 
     /**
-     *  — DTO (Data Transfer Object):
-     *   Records are ideal DTOs in modern Java.
-     *   They carry data between HTTP layer → service layer without exposing internals.
+     * Streaming chat endpoint — Server-Sent Events (text/event-stream).
+     * Returns a Flux; Spring MVC streams each emitted chunk to the client as it
+     * arrives, so a UI can render the reply progressively.
+     *   GET /api/chat/stream?message=Tell me a story
      */
-    record ChatRequest(String system, String message) {}
+    @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> stream(
+            @RequestParam @NotBlank @Size(max = 4000) String message) {
+        return chatService.chatStream(message);
+    }
+
+    /**
+     * Request DTO — @NotBlank guards both fields; @Size caps abuse.
+     * The system prompt is optional context but still shouldn't be blank if sent.
+     */
+    record ChatRequest(
+            @NotBlank @Size(max = 4000) String system,
+            @NotBlank @Size(max = 4000) String message) {}
+
+    /** Response DTO — wrapping the answer in JSON keeps the API extensible. */
+    record ChatResponse(String answer) {}
 }
