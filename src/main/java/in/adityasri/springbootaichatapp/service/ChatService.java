@@ -27,8 +27,10 @@ public class ChatService {
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
 
     private final ChatClient chatClient;
+    private final ChatMemory chatMemory;
 
     public ChatService(ChatClient.Builder chatClientBuilder, ChatMemory chatMemory) {
+        this.chatMemory = chatMemory;
         this.chatClient = chatClientBuilder
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
                 .build();
@@ -69,5 +71,13 @@ public class ChatService {
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
                 .stream()
                 .content();
+    }
+
+    /**
+     * Forgets the stored history for a conversation — the next message starts fresh.
+     */
+    public void clearConversation(String conversationId) {
+        log.debug("clearing conversation [conversationId={}]", conversationId);
+        chatMemory.clear(conversationId);
     }
 }

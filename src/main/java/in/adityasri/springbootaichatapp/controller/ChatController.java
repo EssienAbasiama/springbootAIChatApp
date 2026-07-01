@@ -77,6 +77,16 @@ public class ChatController {
     }
 
     /**
+     * Clears a conversation's memory so the next message starts a fresh thread.
+     *   DELETE /api/chat/conversation/abc
+     */
+    @DeleteMapping("/conversation/{conversationId}")
+    public ChatResponse clearConversation(@PathVariable String conversationId) {
+        chatService.clearConversation(conversationId);
+        return new ChatResponse("Conversation '" + conversationId + "' cleared.");
+    }
+
+    /**
      * Request DTO — @NotBlank guards both fields; @Size caps abuse.
      */
     record ChatRequest(
